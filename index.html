@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Headphone Peak & Dip Detector - 耳で調べる周波数特性</title>
+    <meta name="description" content="イヤホン・ヘッドホンのピークやディップ（周波数特性の山と谷）を、A/B比較テストを通じて詳細に特定・分析するWebアプリケーション。">
+    <link rel="stylesheet" href="styles.css">
+    <!-- Google Fonts: Outfit for numbers/headings, Inter for body text -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=Outfit:wght@400;600;700;800&display=swap" rel="stylesheet">
+    <!-- Chart.js for beautiful interactive results chart -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+    <div class="app-container">
+        <!-- Header -->
+        <header class="app-header">
+            <div class="logo">
+                <span class="logo-icon">⚡</span>
+                <h1>AcousticLens</h1>
+            </div>
+            <p class="subtitle">Peak & Dip Detector for Headphones</p>
+        </header>
+
+        <!-- Main Workspace -->
+        <main class="app-main">
+            <!-- Screen 1: Safety & Instructions -->
+            <section id="screen-intro" class="card active">
+                <h2>1. 安全のための注意事項と装着</h2>
+                <p class="warning-text">
+                    <strong>⚠️ 警告:</strong> 本アプリは純粋な正弦波（サイン波）を再生します。高音域のサイン波は、音量が小さく感じられても耳に大きな負担を与える場合があります。<b>必ず音量を十分に下げた状態で開始してください。</b>
+                </p>
+                
+                <div class="setup-steps">
+                    <div class="step-item">
+                        <span class="step-num">1</span>
+                        <p>イヤホンまたはヘッドホンを装着してください。</p>
+                    </div>
+                    <div class="step-item">
+                        <span class="step-num">2</span>
+                        <p>OSやブラウザのシステム音量を <strong>10%〜20% 程度</strong> まで下げてください。</p>
+                    </div>
+                    <div class="step-item">
+                        <span class="step-num">3</span>
+                        <p>下記の「テスト音再生」を押し、ピーという音がごく微小に聴こえることを確認・音量調節してください。</p>
+                    </div>
+                </div>
+
+                <div class="volume-test-box">
+                    <button id="btn-test-sound" class="btn btn-secondary">🔊 テスト音を再生 (1000Hz)</button>
+                    <div class="volume-control-inline">
+                        <label for="input-init-volume">アプリ内マスター音量:</label>
+                        <input type="range" id="input-init-volume" min="1" max="30" value="8">
+                        <span id="init-volume-val">8%</span>
+                    </div>
+                </div>
+
+                <div class="consent-checkbox-wrapper">
+                    <label class="checkbox-container">
+                        <input type="checkbox" id="chk-safety">
+                        <span class="checkmark"></span>
+                        音量を十分に下げ、自己責任で安全にテストを行うことに同意します。
+                    </label>
+                </div>
+
+                <button id="btn-go-to-config" class="btn btn-primary btn-block" disabled>次へ進む ➔</button>
+            </section>
+
+            <!-- Screen 2: Configuration -->
+            <section id="screen-config" class="card">
+                <h2>2. 測定範囲の設定</h2>
+                <p class="card-desc">調査したい周波数範囲と初期測定ポイント数を指定します。</p>
+
+                <div class="form-group-grid">
+                    <div class="form-group">
+                        <label for="input-freq-min">開始周波数 (Hz)</label>
+                        <input type="number" id="input-freq-min" value="1000" min="20" max="20000">
+                        <span class="helper-text">一般的にピーク・ディップが顕著な1,000Hz以上を推奨します。</span>
+                    </div>
+                    <div class="form-group">
+                        <label for="input-freq-max">終了周波数 (Hz)</label>
+                        <input type="number" id="input-freq-max" value="12000" min="20" max="20000">
+                        <span class="helper-text">人間の耳の感度やヘッドホンの共振限界である12kHz〜15kHz程度までが適しています。</span>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label for="input-test-points">初期スキャン数（分割数）</label>
+                    <div class="range-slider-wrapper">
+                        <input type="range" id="input-test-points" min="5" max="15" value="9">
+                        <span id="test-points-val">9 ポイント</span>
+                    </div>
+                    <span class="helper-text">ポイント数が多いほど細かく調べられますが、最初のA/B比較の回数が増えます（スキャン数 - 1 回の比較）。</span>
+                </div>
+
+                <div class="btn-group">
+                    <button id="btn-back-to-intro" class="btn btn-secondary">戻る</button>
+                    <button id="btn-start-test" class="btn btn-primary">測定を開始する ➔</button>
+                </div>
+            </section>
+
+            <!-- Screen 3: A/B Testing Interface -->
+            <section id="screen-test" class="card">
+                <div class="test-header">
+                    <span id="test-progress-text">比較: 1 / 8</span>
+                    <div class="progress-bar-outer">
+                        <div id="test-progress-bar" class="progress-bar-inner" style="width: 12.5%;"></div>
+                    </div>
+                </div>
+
+                <div class="ab-player-container">
+                    <div class="tone-card" id="tone-card-a">
+                        <span class="tone-label">TONE A</span>
+                        <span class="tone-freq" id="freq-val-a">1,000 Hz</span>
+                        <button id="btn-play-a" class="btn btn-tone">▶ 再生</button>
+                    </div>
+
+                    <div class="vs-divider">VS</div>
+
+                    <div class="tone-card" id="tone-card-b">
+                        <span class="tone-label">TONE B</span>
+                        <span class="tone-freq" id="freq-val-b">1,500 Hz</span>
+                        <button id="btn-play-b" class="btn btn-tone">▶ 再生</button>
+                    </div>
+                </div>
+
+                <div class="player-controls">
+                    <button id="btn-toggle-play" class="btn btn-accent">🔁 A/Bを交互に自動切替 (2秒ごと)</button>
+                    <button id="btn-stop-all" class="btn btn-danger">⏹ 一時停止</button>
+                </div>
+
+                <div class="rating-section">
+                    <h3>どちらの音が大きく聴こえますか？</h3>
+                    <p class="rating-desc">※ヘッドホンの周波数特性、または耳の特性によって、同じアンプ出力でも音量に差が生まれます。</p>
+                    
+                    <div class="rating-buttons">
+                        <button class="btn btn-rate" data-score="2">
+                            <span class="rate-icon">🠄🠄</span>
+                            <span class="rate-lbl">Aの方が大きい</span>
+                        </button>
+                        <button class="btn btn-rate" data-score="1">
+                            <span class="rate-icon">🠄</span>
+                            <span class="rate-lbl">Aの方がやや大きい</span>
+                        </button>
+                        <button class="btn btn-rate" data-score="0">
+                            <span class="rate-icon">●</span>
+                            <span class="rate-lbl">同じ</span>
+                        </button>
+                        <button class="btn btn-rate" data-score="-1">
+                            <span class="rate-icon">🠆</span>
+                            <span class="rate-lbl">Bの方がやや大きい</span>
+                        </button>
+                        <button class="btn btn-rate" data-score="-2">
+                            <span class="rate-icon">🠆🠆</span>
+                            <span class="rate-lbl">Bの方が大きい</span>
+                        </button>
+                    </div>
+                    
+                    <div class="keyboard-shortcuts">
+                        <span>ショートカットキー操作も可能です: </span>
+                        <kbd>1</kbd> Aが大きい / <kbd>2</kbd> Aがやや大きい / <kbd>3</kbd> 同じ / <kbd>4</kbd> Bがやや大きい / <kbd>5</kbd> Bが大きい / <kbd>スペース</kbd> 交互切替 / <kbd>S</kbd> 停止
+                    </div>
+                </div>
+
+                <div class="test-footer-controls">
+                    <button id="btn-prev-test" class="btn btn-secondary" disabled>⏮ 前の比較へ</button>
+                    <div class="volume-slider-container">
+                        <span class="vol-icon">🔊</span>
+                        <input type="range" id="input-test-volume" min="1" max="30" value="8">
+                        <span id="test-volume-val">8%</span>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Screen 4: Results & Refinement -->
+            <section id="screen-results" class="card">
+                <h2>3. 測定結果分析</h2>
+                <p class="card-desc">回答から計算されたヘッドホンの推定周波数特性カーブです。</p>
+
+                <!-- Graphic Chart -->
+                <div class="chart-container">
+                    <canvas id="resultsChart"></canvas>
+                </div>
+
+                <!-- Analysis Summary Lists -->
+                <div class="results-grid">
+                    <!-- Peaks List -->
+                    <div class="results-column card-glass">
+                        <h3 class="peak-header">▲ ピーク（山）</h3>
+                        <div id="peaks-list" class="extrema-list">
+                            <!-- JS will inject peak items here -->
+                        </div>
+                    </div>
+
+                    <!-- Dips List -->
+                    <div class="results-column card-glass">
+                        <h3 class="dip-header">▼ ディップ（谷）</h3>
+                        <div id="dips-list" class="extrema-list">
+                            <!-- JS will inject dip items here -->
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Refinement / Action Area -->
+                <div class="action-card card-glass">
+                    <div class="action-details">
+                        <h4>🔍 ピークやディップをさらに詳しく絞り込む</h4>
+                        <p>検出されたピークとディップの周辺に新しい測定点を追加し、さらに細かく比較テストを行います（確信度・精度が上がります）。</p>
+                    </div>
+                    <button id="btn-refine" class="btn btn-accent">
+                        <span class="btn-icon">⚡</span>
+                        詳細測定（リファイン）を開始
+                    </button>
+                </div>
+
+                <!-- Verification Sweep Area -->
+                <div class="verification-card card-glass">
+                    <h4>🔊 測定結果を耳で確認する（マニュアルスイープ）</h4>
+                    <p>スライダーを動かしてサイン波の周波数を手動で動かし、グラフの山と谷の部分で実際に音が大きく／小さく聴こえるか確認できます。</p>
+                    
+                    <div class="sweep-controls-container">
+                        <button id="btn-sweep-toggle" class="btn btn-primary">▶ スイープ音を再生</button>
+                        <div class="sweep-slider-wrapper">
+                            <span class="freq-label" id="lbl-sweep-min">1,000 Hz</span>
+                            <div class="slider-val-bubble">
+                                <input type="range" id="input-sweep-freq" min="1000" max="12000" value="3000">
+                                <output id="sweep-freq-bubble">3,000 Hz</output>
+                            </div>
+                            <span class="freq-label" id="lbl-sweep-max">12,000 Hz</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="btn-group reset-group">
+                    <button id="btn-restart" class="btn btn-secondary">🔄 最初からやり直す</button>
+                </div>
+            </section>
+        </main>
+
+        <footer class="app-footer">
+            <p>&copy; 2026 AcousticLens. Powered by Web Audio API.</p>
+        </footer>
+    </div>
+    
+    <script src="app.js"></script>
+</body>
+</html>
